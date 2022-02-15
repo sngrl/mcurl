@@ -1,11 +1,14 @@
 {
-    "name": "khr/php-mcurl-client",
-    "description": "wrap curl client (http client) for PHP 5.3; using php multi curl, parallel request and write asynchronous code",
+    "name": "sngrl/mcurl",
+    "description": "wrap curl client (http client) for PHP 5.3+; using php multi curl, parallel request and write asynchronous code",
     "keywords": ["php", "curl","multi", "client", "http", "async", "parallel", "requests", "spider"],
-    "homepage": "http://github.com/khristenkoyura/mcurl",
+    "homepage": "http://github.com/sngrl/mcurl",
     "type": "library",
     "license": "MIT",
     "authors": [
+        {
+            "name": "Sngrl",
+        },
         {
             "name": "Khristenko Yura",
             "email": "khristenkoyura@gmail.com"
