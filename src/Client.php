@@ -47,6 +47,7 @@ class Client
     protected $curlOptions = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 60,
+        CURLOPT_FOLLOWLOCATION => true,
     ];
 
     /**

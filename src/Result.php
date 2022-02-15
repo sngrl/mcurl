@@ -128,9 +128,9 @@ class Result
                 list($name, $value) = array_map('trim', explode(':', $header, 2));
                 $name = strtolower($name);
                 if ($name == 'set-cookie') {
-                    $this->rawHeaders[$name][] = $value;
+                    $this->rawHeaders[$name][] = trim($value);
                 } else {
-                    $this->rawHeaders[$name] = $value;
+                    $this->rawHeaders[$name] = trim($value);
                 }
             }
         }
