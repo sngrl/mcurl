@@ -4,7 +4,6 @@ namespace MCurl;
 
 class Client
 {
-
     /**
      * Result write in memory
      */
@@ -22,7 +21,7 @@ class Client
     protected $queries = [];
 
     /**
-     * Not exec count request
+     * Count of the requests which are not executed yet - waiting for going to active queue
      * @var int
      */
     protected $queriesCount = 0;
@@ -51,7 +50,7 @@ class Client
     ];
 
     /**
-     * Max asynchron request
+     * Max asynchronous requests
      * @var int
      */
     protected $maxRequest = 10;
@@ -66,23 +65,25 @@ class Client
      * Sleep script undo $this->sleepNext request
      * @var int microsecond
      */
-    protected $sleep = 0;
+    protected $sleepSeconds = 0;
 
     /**
-     * @see $this->sleep
+     * Count of the queries which was processed in one cycle
      * @var int
      */
     protected $sleepNext;
 
+    /**
+     * @var boolean
+     * @deprecated
+     */
     protected $sleepBlocking;
 
-    protected $sleepNextTime;
-
     /**
-     * Count executed request
+     * Total executed requests count
      * @var int
      */
-    protected $count = 0;
+    protected $totalExecutedRequests = 0;
 
     /**
      * Save results
@@ -132,6 +133,41 @@ class Client
      * @var string
      */
     protected $baseUrl;
+
+    /**
+     * @var null|float
+     */
+    protected $startWorkTime = null;
+
+    /**
+     * @var null|integer
+     */
+    protected $queriesLimitPerSleepCycle = null;
+
+    /**
+     * @var int
+     */
+    protected $processedQueriesCountPerSleepCycle = 0;
+
+    /**
+     * @var null|float
+     */
+    protected $lastSleepTime = null;
+
+    /**
+     * @var bool
+     */
+    private $afterRequestTimeoutEnabled = false;
+
+    /**
+     * @var float
+     */
+    private $afterRequestTimeoutCoefficient = 0.25;
+
+    /**
+     * @var float|int
+     */
+    private $afterRequestTimeout = null;
 
     public function __construct()
     {
@@ -343,22 +379,21 @@ class Client
 
     /**
      * @param int   $next
-     * @param float $second
+     * @param float $seconds
      * @param bool  $blocking
      *
      * @return self
      */
-    public function setSleep($next, $second = 1.0, $blocking = true)
+    public function setSleep($next, $seconds = 1.0, $blocking = true)
     {
-        $this->sleep = $second;
         $this->sleepNext = $next;
+        $this->sleepSeconds = $seconds;
         $this->sleepBlocking = $blocking;
 
         return $this;
     }
 
     /**
-     * Return count query
      * @return int
      */
     public function getCountQuery()
@@ -378,6 +413,8 @@ class Client
 
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
+
+        $this->startWorkTime = microtime(true);
 
         return $this->processedQuery();
     }
@@ -474,7 +511,7 @@ class Client
     protected function processedResponse($id)
     {
         --$this->queriesQueueCount;
-        ++$this->count;
+        ++$this->totalExecutedRequests;
         $query = $this->queriesQueue[$id];
 
         $result = new $this->classResult($query);
@@ -486,6 +523,16 @@ class Client
 
         curl_multi_remove_handle($this->mh, $query['ch']);
         unset($this->queriesQueue[$id]);
+
+        /**
+         * Current cycle calculations & actions
+         */
+        ++$this->processedQueriesCountPerSleepCycle;
+        if ($this->afterRequestTimeoutEnabled) {
+            if ($this->afterRequestTimeout > 0) {
+                usleep($this->afterRequestTimeout);
+            }
+        }
 
         return true;
     }
@@ -500,54 +547,121 @@ class Client
             return false;
         }
 
-        $count = $this->maxRequest - $this->queriesQueueCount;
+        /**
+         * Initial values
+         */
+        if (!$this->lastSleepTime) {
+            //$this->queriesLimitPerSleepCycle = (int)($this->maxRequest * $this->sleepNext);
+            $this->queriesLimitPerSleepCycle = $this->sleepNext;
+            $this->lastSleepTime = microtime(true);
+        }
 
-        if ($this->sleep !== 0) {
-            $modulo_begin = $this->count % $this->sleepNext;
-            $modulo_end = ($this->count + $count) % $this->sleepNext;
+        $queueFreeSlotsCount = $this->maxRequest - $this->queriesQueueCount;
 
-            $current_time = microtime(true);
-            if (!isset($this->sleepNextTime)) {
-                $this->sleepNextTime = $current_time - $this->sleep;
-            }
-            $sleep_time = (int)(($this->sleep - ($current_time - $this->sleepNextTime)) * 1000000);
+        if ($this->sleepSeconds !== 0 && $this->isRunMh) {
+            /**
+             * Reached limit of the queries at one cycle (for example: only 5 queries per 1 second)
+             */
+            if ($this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle) {
+                $current_time = microtime(true);
+                /**
+                 * Calculate how much time has passed since last cycle limit reaching
+                 */
+                $currentCycleTimeRemains = $this->sleepSeconds - ($current_time - $this->lastSleepTime);
 
-            if ($sleep_time > 0) {
-                if ($modulo_begin === 0) {
-                    if ($this->sleepBlocking) {
-                        usleep($sleep_time);
-                        $sleep_time = 0;
-                        $current_time = microtime(true);
-                    } else {
-                        $count = 0;
+                /**
+                 * This value is show how many time left in the current cycle
+                 * If this value is greater than 0 it means that we need to wait this time, until the current cycle ends
+                 */
+                if ($currentCycleTimeRemains > 0) {
+                    $currentCycleTimeRemainsMs = $currentCycleTimeRemains * 1000000;
+                    //this_info('SLEEP ' . round($currentCycleTimeRemains, 4) . ' sec(s)... Cycle queries limit: ' . $this->queriesLimitPerSleepCycle . ' per ' . $this->sleepSeconds . ' sec(s)');
+
+                    /**
+                     * Set/update timeout correction after each request
+                     * If our requests finished so quick that there is an excess of time, we can do small timeout after each request
+                     * to evenly distribute all single cycle requests over the time of the current cycle.
+                     * We can correct this value in future
+                     */
+                    if ($this->afterRequestTimeoutEnabled) {
+                        $this->afterRequestTimeout = $currentCycleTimeRemainsMs / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient;
+                        //this_info('Correction = ' . $this->afterRequestTimeout);
                     }
-                } elseif ($modulo_begin >= $modulo_end) {
-                    $count -= $modulo_end;
-                }
-            }
 
-            if ($sleep_time <= 0 && ($modulo_begin === 0 || $modulo_begin >= $modulo_end)) {
-                $this->sleepNextTime = $current_time;
+                    usleep($currentCycleTimeRemainsMs);
+                } else {
+                    /**
+                     * If this value is less then 0 it means thar reaching the queries limit took more time than one cycle lasts
+                     * It mean that some time waiting is not required here, but we need to drop cycle timer below at the code
+                     * It seems that there is no way to get into here
+                     */
+                    // do nothing...
+                }
+
+                /**
+                 * Start new cycle timer & drop single cycle processed queries counter
+                 */
+                $this->lastSleepTime = microtime(true);
+                /*
+                d([
+                    '__event__'                                 => '$this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle',
+                    '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
+                    '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
+                    '$currentCycleTimeRemains'                  => $currentCycleTimeRemains,
+                    '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
+                ]);
+                //*/
+                $this->processedQueriesCountPerSleepCycle = 0;
+            } elseif ($this->lastSleepTime + $this->sleepSeconds <= microtime(true)) {
+                /**
+                 * Current cycle was ended early than single cycle queries limit was reached
+                 * Start new cycle timer, drop single cycle processed queries counter,
+                 * make correction of the timeout correction after each request
+                 */
+                //this_info('DROP CYCLE TIMER!! Processed queries at the current cycle = ' . $this->processedQueriesCountPerSleepCycle . ' of ' . $this->queriesLimitPerSleepCycle);
+                if ($this->afterRequestTimeoutEnabled) {
+                    $this->afterRequestTimeout = $this->processedQueriesCountPerSleepCycle * $this->afterRequestTimeout / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient;
+                }
+                /*
+                d([
+                    '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
+                    '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
+                    '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
+                ]);
+                //*/
+                $this->lastSleepTime = microtime(true);
+                $this->processedQueriesCountPerSleepCycle = 0;
             }
         }
 
-        if ($count > 0) {
-            $limit = $this->queriesCount < $count ? $this->queriesCount : $count;
+        /**
+         * If free slots are available at queue...
+         */
+        if ($queueFreeSlotsCount > 0) {
+            $limit = $this->queriesCount < $queueFreeSlotsCount ? $this->queriesCount : $queueFreeSlotsCount;
 
+            /**
+             * Fill queue for limit was reached
+             */
             $this->queriesCount -= $limit;
             $this->queriesQueueCount += $limit;
-            while ($limit--) {
+            do {
+                /**
+                 * Get first pre-queue query from the stack
+                 */
                 $key = key($this->queries);
                 $query = $this->queries[$key];
                 unset($this->queries[$key]);
 
+                /**
+                 * Create curl handler & add query to queue
+                 */
                 $query['ch'] = curl_init();
                 curl_setopt_array($query['ch'], $query['opts'] + $this->curlOptions);
-
                 curl_multi_add_handle($this->mh, $query['ch']);
                 $id = $this->getResourceId($query['ch']);
                 $this->queriesQueue[$id] = $query;
-            }
+            } while (--$limit);
         }
 
         return $this->isRunMh = true;
@@ -590,9 +704,95 @@ class Client
 
     /**
      * @param string $baseUrl
+     *
+     * @return self
      */
     public function setBaseUrl($baseUrl)
     {
         $this->baseUrl = $baseUrl;
+
+        return $this;
+    }
+
+    /**
+     * @return int
+     */
+    public function getTotalExecutedRequests()
+    {
+        return $this->totalExecutedRequests;
+    }
+
+    /**
+     * @return int
+     */
+    public function getQueriesQueueCount()
+    {
+        return $this->queriesQueueCount;
+    }
+
+    /**
+     * Get current rate of the requests per second from the start of the work
+     *
+     * @param int $precision
+     *
+     * @return float
+     */
+    public function getRequestsPerSeconds($precision = 2)
+    {
+        return round($this->getTotalExecutedRequests() / (microtime(true) - $this->startWorkTime), $precision);
+    }
+
+    /**
+     * @return bool
+     */
+    public function isAfterRequestTimeoutEnabled()
+    {
+        return $this->afterRequestTimeoutEnabled;
+    }
+
+    /**
+     * @param null|float|integer $afterRequestTimeoutCoefficient
+     *
+     * @return self
+     */
+    public function enableAfterRequestTimeout($afterRequestTimeoutCoefficient = null)
+    {
+        $this->afterRequestTimeoutEnabled = true;
+
+        if (is_float($afterRequestTimeoutCoefficient) || is_integer($afterRequestTimeoutCoefficient)) {
+            $this->afterRequestTimeoutCoefficient = $afterRequestTimeoutCoefficient;
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
+    public function disableAfterRequestTimeout()
+    {
+        $this->afterRequestTimeoutEnabled = false;
+
+        return $this;
+    }
+
+    /**
+     * @return float
+     */
+    public function getAfterRequestTimeoutCoefficient()
+    {
+        return $this->afterRequestTimeoutCoefficient;
+    }
+
+    /**
+     * @param float $afterRequestTimeoutCoefficient
+     *
+     * @return self
+     */
+    public function setAfterRequestTimeoutCoefficient(float $afterRequestTimeoutCoefficient)
+    {
+        $this->afterRequestTimeoutCoefficient = $afterRequestTimeoutCoefficient;
+
+        return $this;
     }
 }
