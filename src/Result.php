@@ -139,7 +139,6 @@ class Result
     }
 
     /**
-     * Result in request
      * @return string
      */
     public function getBody()
@@ -165,13 +164,12 @@ class Result
 
     /**
      * @return mixed
-     * @see json_decode
      */
     public function getJson()
     {
         $args = func_get_args();
         if (empty($args)) {
-            return @json_decode($this->getBody());
+            return @json_decode($this->getBody(), true);
         } else {
             array_unshift($args, $this->getBody());
 
@@ -187,7 +185,6 @@ class Result
     {
         return $this->query['params'];
     }
-
 
     /**
      * Has error
@@ -283,6 +280,18 @@ class Result
 
     public function __destruct()
     {
+        $this->closeFileHandlers();
+
+        if (is_resource($this->query['ch'])) {
+            curl_close($this->query['ch']);
+        }
+    }
+
+    /**
+     * @return self
+     */
+    public function closeFileHandlers()
+    {
         if (isset($this->query['opts'][CURLOPT_FILE]) && is_resource($this->query['opts'][CURLOPT_FILE])) {
             fclose($this->query['opts'][CURLOPT_FILE]);
         }
@@ -291,8 +300,6 @@ class Result
             fclose($this->query['opts'][CURLOPT_WRITEHEADER]);
         }
 
-        if (is_resource($this->query['ch'])) {
-            curl_close($this->query['ch']);
-        }
+        return $this;
     }
 }
