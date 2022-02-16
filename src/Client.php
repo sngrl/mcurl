@@ -767,7 +767,7 @@ class Client
      */
     public function getRequestsPerSeconds($precision = 2)
     {
-        return round($this->getTotalExecutedRequests() / (microtime(true) - $this->startWorkTime), $precision);
+        return round($this->getTotalExecutedRequests() / $this->getCurrentWorkTime(), $precision);
     }
 
     /**
@@ -838,5 +838,21 @@ class Client
     public function getQueriesQueue()
     {
         return $this->queriesQueue;
+    }
+
+    /**
+     * @return float|null
+     */
+    public function getStartWorkTime()
+    {
+        return $this->startWorkTime;
+    }
+
+    /**
+     * @return float|null
+     */
+    public function getCurrentWorkTime()
+    {
+        return $this->startWorkTime ? microtime(true) - $this->startWorkTime : null;
     }
 }
