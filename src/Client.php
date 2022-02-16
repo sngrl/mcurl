@@ -121,11 +121,14 @@ class Client
      */
     protected $streamResult = null;
 
+    /**
+     * @var bool
+     */
     protected $enableHeaders = false;
 
     /**
-     * @see http://php.net/manual/ru/stream.filters.php
      * @var array
+     * @see http://php.net/manual/ru/stream.filters.php
      */
     protected $streamFilters = [];
 
@@ -339,6 +342,14 @@ class Client
     }
 
     /**
+     * @return array
+     */
+    public function getCurlOptions()
+    {
+        return $this->curlOptions;
+    }
+
+    /**
      * @param $option
      * @param $value
      *
@@ -378,6 +389,14 @@ class Client
     }
 
     /**
+     * @return int
+     */
+    public function getMaxRequest()
+    {
+        return $this->maxRequest;
+    }
+
+    /**
      * @param int   $next
      * @param float $seconds
      * @param bool  $blocking
@@ -396,9 +415,18 @@ class Client
     /**
      * @return int
      */
-    public function getCountQuery()
+    public function getQueriesCount()
     {
         return $this->queriesCount;
+    }
+
+    /**
+     * Leave for backward compatibility
+     * @return int
+     */
+    public function getCountQuery()
+    {
+        return $this->getQueriesCount();
     }
 
     /**
@@ -794,5 +822,21 @@ class Client
         $this->afterRequestTimeoutCoefficient = $afterRequestTimeoutCoefficient;
 
         return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getQueries()
+    {
+        return $this->queries;
+    }
+
+    /**
+     * @return array
+     */
+    public function getQueriesQueue()
+    {
+        return $this->queriesQueue;
     }
 }
