@@ -442,7 +442,9 @@ class Client
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
 
-        $this->startWorkTime = microtime(true);
+        if (!$this->startWorkTime) {
+            $this->startWorkTime = microtime(true);
+        }
 
         return $this->processedQuery();
     }
