@@ -82,6 +82,26 @@ class Result
     }
 
     /**
+     * @param mixed $option
+     *
+     * @return mixed|null
+     */
+    public function getOption($option)
+    {
+        return $this->hasOption($option) ? $this->query['opts'][$option] : null;
+    }
+
+    /**
+     * @param mixed $option
+     *
+     * @return bool
+     */
+    public function hasOption($option)
+    {
+        return isset($this->query['opts'][$option]);
+    }
+
+    /**
      * Return curl option full list in request
      * @return array
      */
@@ -181,9 +201,38 @@ class Result
      * return params request
      * @return mixed
      */
-    public function getParams()
+    public function getParameters()
     {
         return $this->query['params'];
+    }
+
+    /**
+     * Alias of the getParameters() for backward compatibility
+     * @return mixed
+     */
+    public function getParams()
+    {
+        return $this->getParameters();
+    }
+
+    /**
+     * @param mixed $parameter
+     *
+     * @return mixed|null
+     */
+    public function getParameter($parameter)
+    {
+        return $this->hasParameter($parameter) ? $this->query['params'][$parameter] : null;
+    }
+
+    /**
+     * @param mixed $parameter
+     *
+     * @return bool
+     */
+    public function hasParameter($parameter)
+    {
+        return isset($this->query['params'][$parameter]);
     }
 
     /**

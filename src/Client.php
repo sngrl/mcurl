@@ -857,4 +857,20 @@ class Client
     {
         return $this->startWorkTime ? microtime(true) - $this->startWorkTime : null;
     }
+
+    /**
+     * @return int
+     */
+    public function getSleepNext()
+    {
+        return $this->sleepNext;
+    }
+
+    /**
+     * @return int
+     */
+    public function getSleepSeconds()
+    {
+        return $this->sleepSeconds;
+    }
 }
