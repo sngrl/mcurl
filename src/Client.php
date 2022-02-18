@@ -17,6 +17,12 @@ class Client
     const STREAM_FILE = 'php://temp/maxmemory:0';
 
     /**
+     * Stream for CURLOPT_WRITEHEADER; by default: self::STREAM_MEMORY
+     * @var string
+     */
+    protected $defaultStream;
+
+    /**
      * Not exec request
      * @var array
      */
@@ -177,6 +183,7 @@ class Client
     public function __construct()
     {
         $this->mh = curl_multi_init();
+        $this->setDefaultStream(self::STREAM_MEMORY);
     }
 
     /**
@@ -256,7 +263,7 @@ class Client
         }
 
         if (!isset($opts[CURLOPT_WRITEHEADER]) && $this->enableHeaders) {
-            $opts[CURLOPT_WRITEHEADER] = fopen(self::STREAM_MEMORY, 'r+');
+            $opts[CURLOPT_WRITEHEADER] = fopen($this->getDefaultStream(), 'r+');
             if (!$opts[CURLOPT_WRITEHEADER]) {
                 return false;
             }
@@ -703,7 +710,8 @@ class Client
                 if (!is_resource($query['ch'])) {
                     throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
                 }
-                curl_setopt_array($query['ch'], $query['opts'] + $this->curlOptions);
+                $options = $this->curlOptions + $query['opts'];
+                curl_setopt_array($query['ch'], $options);
                 curl_multi_add_handle($this->mh, $query['ch']);
                 $id = $this->getResourceId($query['ch']);
                 $this->queriesQueue[$id] = $query;
@@ -888,5 +896,25 @@ class Client
     public function getSleepSeconds()
     {
         return $this->sleepSeconds;
+    }
+
+    /**
+     * @return string
+     */
+    public function getDefaultStream(): string
+    {
+        return $this->defaultStream;
+    }
+
+    /**
+     * @param string $defaultStream
+     *
+     * @return self
+     */
+    public function setDefaultStream(string $defaultStream)
+    {
+        $this->defaultStream = $defaultStream;
+
+        return $this;
     }
 }
