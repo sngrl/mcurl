@@ -185,16 +185,17 @@ class Client
      *
      * @param string|array $url
      * @param array        $opts @see http://www.php.net/manual/ru/function.curl-setopt.php
+     * @param array        $params
      *
      * @return Result|Result[]|null
      */
-    public function get($url, $opts = [])
+    public function get($url, $opts = [], $params = [])
     {
         $urls = (array)$url;
 
         foreach ($urls as $id => $u) {
             $opts[CURLOPT_URL] = $u;
-            $this->add($opts, $id);
+            $this->add($opts, $params, $id);
         }
 
         return is_array($url) ? $this->all() : $this->next();
@@ -204,34 +205,34 @@ class Client
      * @param string|array $url
      * @param array        $data post data
      * @param array        $opts
+     * @param array        $params
      *
      * @return Result|Result[]|null
      * @see $this->get
      */
-    public function post($url, $data = [], $opts = [])
+    public function post($url, $data = [], $opts = [], $params = [])
     {
         $opts[CURLOPT_POST] = true;
         $opts[CURLOPT_POSTFIELDS] = $data;
 
-        return $this->get($url, $opts);
+        return $this->get($url, $opts, $params);
     }
 
     /**
      * Add request
      *
-     * @param array        $opts   Options curl. Example: [CURLOPT_URL => 'http://example.com'];
-     * @param array|string $params All data, require binding to the request or if string: identity request
+     * @param array                     $opts   Options curl. Example: [CURLOPT_URL => 'http://example.com'];
+     * @param array|string              $params All data, require binding to the request or if string: identity request
+     * @param null|string|integer|float $id
      *
      * @return bool
      */
-    public function add($opts = [], $params = [])
+    public function add($opts = [], $params = [], $id = null)
     {
-        $id = null;
-
-        if (is_string($params)) {
-            $id = $params;
-            $params = [];
-        }
+        //if (is_string($params)) {
+        //    $id = $params;
+        //    $params = [];
+        //}
 
         if (isset($this->baseUrl, $opts[CURLOPT_URL])) {
             $opts[CURLOPT_URL] = $this->baseUrl . $opts[CURLOPT_URL];
@@ -421,7 +422,7 @@ class Client
     }
 
     /**
-     * Leave for backward compatibility
+     * Backward compatibility
      * @return int
      */
     public function getCountQuery()
@@ -545,7 +546,7 @@ class Client
         $query = $this->queriesQueue[$id];
 
         $result = new $this->classResult($query);
-        if (isset($query['id'])) {
+        if (isset($query['id']) && $query['id'] !== null) {
             $this->results[$query['id']] = $result;
         } else {
             $this->results[] = $result;
