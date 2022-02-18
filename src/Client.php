@@ -2,6 +2,8 @@
 
 namespace MCurl;
 
+use Exception;
+
 class Client
 {
     /**
@@ -188,6 +190,7 @@ class Client
      * @param array        $params
      *
      * @return Result|Result[]|null
+     * @throws Exception
      */
     public function get($url, $opts = [], $params = [])
     {
@@ -208,6 +211,7 @@ class Client
      * @param array        $params
      *
      * @return Result|Result[]|null
+     * @throws Exception
      * @see $this->get
      */
     public function post($url, $data = [], $opts = [], $params = [])
@@ -433,6 +437,7 @@ class Client
     /**
      * Exec cURL resource
      * @return bool
+     * @throws Exception
      */
     public function run()
     {
@@ -454,6 +459,7 @@ class Client
     /**
      * Return all results; wait all request
      * @return Result[]|null[]
+     * @throws Exception
      */
     public function all()
     {
@@ -469,6 +475,7 @@ class Client
     /**
      * Return one next result, wait first exec request
      * @return Result|null
+     * @throws Exception
      */
     public function next()
     {
@@ -570,6 +577,7 @@ class Client
 
     /**
      * @return bool
+     * @throws Exception
      */
     protected function processedQuery()
     {
@@ -687,7 +695,14 @@ class Client
                 /**
                  * Create curl handler & add query to queue
                  */
-                $query['ch'] = curl_init();
+                $t = 0;
+                do {
+                    ++$t;
+                    $query['ch'] = curl_init();
+                } while(!is_resource($query['ch']) || $t < 3);
+                if (!is_resource($query['ch'])) {
+                    throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
+                }
                 curl_setopt_array($query['ch'], $query['opts'] + $this->curlOptions);
                 curl_multi_add_handle($this->mh, $query['ch']);
                 $id = $this->getResourceId($query['ch']);
