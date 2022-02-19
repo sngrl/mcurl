@@ -319,19 +319,27 @@ class Result
     public function toArray()
     {
         return [
-            'error'      => ($this->hasError()
-                ? [
-                    'type'    => $this->getErrorType(),
-                    'code'    => $this->getErrorCode(),
-                    'message' => $this->getError(),
-                ]
-                : null
-            ),
+            'error'      => $this->getErrorArray(),
             'headers'    => $this->getHeaders(),
             'body'       => $this->getBody(),
             'options'    => $this->getOptionsFull(),
             'parameters' => $this->getParameters(),
         ];
+    }
+
+    /**
+     * @return array
+     */
+    public function getErrorArray()
+    {
+        return ($this->hasError()
+            ? [
+                'type'    => $this->getErrorType(),
+                'code'    => $this->getErrorCode(),
+                'message' => $this->getError(),
+            ]
+            : null
+        );
     }
 
     /**
