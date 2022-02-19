@@ -734,7 +734,12 @@ class Client
                     //}
                 }
                 $query['opts'] = $opts;
-                curl_setopt_array($query['ch'], $query['opts']);
+                try {
+                    curl_setopt_array($query['ch'], $query['opts']);
+                } catch (Exception $e) {
+                    d($query);
+                    throw $e;
+                }
                 curl_multi_add_handle($this->mh, $query['ch']);
                 $id = $this->getResourceId($query['ch']);
                 $this->queriesQueue[$id] = $query;
