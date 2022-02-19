@@ -334,7 +334,6 @@ class Result
         ];
     }
 
-
     /**
      * Simple get result
      * @Example: $this->id, $this->body, $this->error, $this->hasError, $this->headers['content-type'], ...
