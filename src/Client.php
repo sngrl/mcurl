@@ -263,10 +263,22 @@ class Client
         }
 
         if (!isset($opts[CURLOPT_WRITEHEADER]) && $this->enableHeaders) {
-            $opts[CURLOPT_WRITEHEADER] = fopen($this->getDefaultStream(), 'r+');
-            if (!$opts[CURLOPT_WRITEHEADER]) {
-                return false;
-            }
+            /**
+             * v1: create file handler right now
+             * The problem here is that if we use multi-threading with setSleep()
+             * opened "file handlers" (in php://) may be closed/erased
+             */
+            //$opts[CURLOPT_WRITEHEADER] = fopen($this->getDefaultStream(), 'r+');
+            //if (!$opts[CURLOPT_WRITEHEADER]) {
+            //    return false;
+            //}
+            /**
+             * v2: just save string path instead of creating file handler;
+             * We will create him directly on the adding to $this->queriesQueue
+             * @see \MCurl\Client::processedQuery
+             */
+            //
+            $opts[CURLOPT_WRITEHEADER] = $this->getDefaultStream();
         }
 
         $query = [
@@ -710,8 +722,18 @@ class Client
                 if (!is_resource($query['ch'])) {
                     throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
                 }
-                $options = $this->curlOptions + $query['opts'];
-                curl_setopt_array($query['ch'], $options);
+                $opts = $this->curlOptions + $query['opts'];
+                /**
+                 * Create file handler right now if string path provided instead of resource
+                 * @see \MCurl\Client::add
+                 */
+                if (isset($opts[CURLOPT_WRITEHEADER]) && is_string($opts[CURLOPT_WRITEHEADER])) {
+                    $opts[CURLOPT_WRITEHEADER] = fopen($opts[CURLOPT_WRITEHEADER], 'r+');
+                    //if (!$opts[CURLOPT_WRITEHEADER]) {
+                    //    return false;
+                    //}
+                }
+                curl_setopt_array($query['ch'], $opts);
                 curl_multi_add_handle($this->mh, $query['ch']);
                 $id = $this->getResourceId($query['ch']);
                 $this->queriesQueue[$id] = $query;
