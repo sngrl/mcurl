@@ -313,6 +313,28 @@ class Result
     }
 
     /**
+     * Return info dump
+     * @return array
+     */
+    public function toArray()
+    {
+        return [
+            'error'      => ($this->hasError()
+                ? [
+                    'type'    => $this->getErrorType(),
+                    'code'    => $this->getErrorCode(),
+                    'message' => $this->getError(),
+                ]
+                : null
+            ),
+            'headers'    => $this->getHeaders(),
+            'body'       => $this->getBody(),
+            'options'    => $this->getOptionsFull(),
+            'parameters' => $this->getParameters(),
+        ];
+    }
+
+    /**
      * Simple get result
      * @Example: $this->id, $this->body, $this->error, $this->hasError, $this->headers['content-type'], ...
      *
