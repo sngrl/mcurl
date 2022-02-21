@@ -71,7 +71,7 @@ class Client
 
     /**
      * Sleep script undo $this->sleepNext request
-     * @var int microsecond
+     * @var float
      */
     protected $sleepSeconds = 0;
 
@@ -179,6 +179,11 @@ class Client
      * @var float|int
      */
     private $afterRequestTimeout = null;
+
+    /**
+     * @var bool
+     */
+    private $debug = false;
 
     public function __construct()
     {
@@ -633,17 +638,23 @@ class Client
                  */
                 if ($currentCycleTimeRemains > 0) {
                     $currentCycleTimeRemainsMs = $currentCycleTimeRemains * 1000000;
-                    //this_info('SLEEP ' . round($currentCycleTimeRemains, 4) . ' sec(s)... Cycle queries limit: ' . $this->queriesLimitPerSleepCycle . ' per ' . $this->sleepSeconds . ' sec(s)');
+
+                    if ($this->isDebug()) {
+                        $this->this_info('SLEEP ' . round($currentCycleTimeRemains, 4) . ' sec(s)... Cycle queries limit: ' . $this->queriesLimitPerSleepCycle . ' per ' . $this->sleepSeconds . ' sec(s)');
+                    }
 
                     /**
                      * Set/update timeout correction after each request
+                     *
                      * If our requests finished so quick that there is an excess of time, we can do small timeout after each request
                      * to evenly distribute all single cycle requests over the time of the current cycle.
-                     * We can correct this value in future
+                     * Get time remains of the current cycle, divide on requests limit per cycle & multiply on coefficient (0.0 - 1.0)
                      */
                     if ($this->afterRequestTimeoutEnabled) {
                         $this->afterRequestTimeout = $currentCycleTimeRemainsMs / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient;
-                        //this_info('Correction = ' . $this->afterRequestTimeout);
+                        if ($this->isDebug()) {
+                            $this->this_info('Correction = ' . $this->afterRequestTimeout);
+                        }
                     }
 
                     usleep($currentCycleTimeRemainsMs);
@@ -660,33 +671,48 @@ class Client
                  * Start new cycle timer & drop single cycle processed queries counter
                  */
                 $this->lastSleepTime = microtime(true);
-                /*
-                d([
-                    '__event__'                                 => '$this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle',
-                    '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
-                    '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
-                    '$currentCycleTimeRemains'                  => $currentCycleTimeRemains,
-                    '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
-                ]);
-                //*/
+
+                if ($this->isDebug()) {
+                    $this->d([
+                        '__event__'                                 => '$this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle',
+                        '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
+                        '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
+                        '$currentCycleTimeRemains'                  => $currentCycleTimeRemains,
+                        '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
+                    ]);
+                }
+
                 $this->processedQueriesCountPerSleepCycle = 0;
             } elseif ($this->lastSleepTime + $this->sleepSeconds <= microtime(true)) {
                 /**
                  * Current cycle was ended early than single cycle queries limit was reached
-                 * Start new cycle timer, drop single cycle processed queries counter,
-                 * make correction of the timeout correction after each request
                  */
-                //this_info('DROP CYCLE TIMER!! Processed queries at the current cycle = ' . $this->processedQueriesCountPerSleepCycle . ' of ' . $this->queriesLimitPerSleepCycle);
-                if ($this->afterRequestTimeoutEnabled) {
-                    $this->afterRequestTimeout = $this->processedQueriesCountPerSleepCycle * $this->afterRequestTimeout / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient;
+                if ($this->isDebug()) {
+                    $this->this_info('DROP CYCLE TIMER!! Processed queries at the current cycle: ' . $this->processedQueriesCountPerSleepCycle . ' of ' . $this->queriesLimitPerSleepCycle);
                 }
-                /*
-                d([
-                    '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
-                    '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
-                    '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
-                ]);
-                //*/
+
+                /**
+                 * Set/update timeout correction after each request
+                 *
+                 * First: get count requests which have been completed at the current cycle,
+                 * multiple on current value of the afterRequestTimeout - now we know how many time script was sleeping.
+                 * Second: divide this value on the current limit of the requests per one cycle - now we know
+                 * how many time script must be sleeping (reduced value compared to the previous one).
+                 * Third: multiple this value on the coefficient (0.0 - 1.0)
+                 */
+                if ($this->afterRequestTimeoutEnabled) {
+                    $this->afterRequestTimeout = $this->afterRequestTimeout
+                        ? $this->processedQueriesCountPerSleepCycle * $this->afterRequestTimeout / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient
+                        : null;
+
+                    if ($this->isDebug()) {
+                        $this->this_info('New value for $this->afterRequestTimeoutCorrection: ' . $this->afterRequestTimeout);
+                    }
+                }
+
+                /**
+                 * Start new cycle timer, drop single cycle processed queries counter,
+                 */
                 $this->lastSleepTime = microtime(true);
                 $this->processedQueriesCountPerSleepCycle = 0;
             }
@@ -718,7 +744,7 @@ class Client
                 do {
                     ++$t;
                     $query['ch'] = curl_init();
-                } while(!is_resource($query['ch']) || $t < 3);
+                } while (!is_resource($query['ch']) || $t < 3);
                 if (!is_resource($query['ch'])) {
                     throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
                 }
@@ -737,7 +763,7 @@ class Client
                 try {
                     curl_setopt_array($query['ch'], $query['opts']);
                 } catch (Exception $e) {
-                    d($query);
+                    $this->d($query);
                     throw $e;
                 }
                 curl_multi_add_handle($this->mh, $query['ch']);
@@ -944,5 +970,66 @@ class Client
         $this->defaultStream = $defaultStream;
 
         return $this;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isDebug()
+    {
+        return $this->debug;
+    }
+
+    /**
+     * @param bool $debug
+     *
+     * @return self
+     */
+    protected function setDebug(bool $debug)
+    {
+        $this->debug = $debug;
+
+        return $this;
+    }
+
+    /**
+     * @return self
+     */
+    public function enableDebug()
+    {
+        return $this->setDebug(true);
+    }
+
+    /**
+     * @return self
+     */
+    public function disableDebug()
+    {
+        return $this->setDebug(false);
+    }
+
+    /**
+     * Just print string/array/object/etc. variable with current date-time
+     * @param mixed $line
+     */
+    protected function this_info($line)
+    {
+        echo '[' . date('Y-m-d H:i:s') . '] ' . (is_string($line) ? $line : print_r($line, true)) . "\n";
+    }
+
+    /**
+     * Dump passed variables, works pretty well in Laravel
+     */
+    protected function d()
+    {
+        foreach (func_get_args() as $v) {
+            if (null != ($class_name = '\Symfony\Component\VarDumper\VarDumper') && class_exists($class_name)) {
+                $class_name::dump($v);
+            } elseif (null != ($class_name = '\Illuminate\Support\Debug\Dumper') && class_exists($class_name)) {
+                (new $class_name())->dump($v);
+            } else {
+                var_dump($v);
+            }
+        }
     }
 }
