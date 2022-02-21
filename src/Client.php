@@ -985,7 +985,7 @@ class Client
      *
      * @return self
      */
-    protected function setDebug(bool $debug)
+    public function setDebug(bool $debug)
     {
         $this->debug = $debug;
 
