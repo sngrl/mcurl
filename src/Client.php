@@ -847,7 +847,13 @@ class Client
      */
     public function getRequestsPerSeconds($precision = 2)
     {
-        return round($this->getTotalExecutedRequests() / $this->getCurrentWorkTime(), $precision);
+        if ($this->getCurrentWorkTime() === null) {
+            return null;
+        } elseif ($this->getCurrentWorkTime() === 0) {
+            return $this->getTotalExecutedRequests();
+        } else {
+            return round($this->getTotalExecutedRequests() / $this->getCurrentWorkTime(), $precision);
+        }
     }
 
     /**
