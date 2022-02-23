@@ -185,6 +185,14 @@ class Client
      */
     private $debug = false;
 
+    /**
+     * Float value for second argument on calling curl_multi_select() function
+     * At some work cases with high values of the threads probably must be decreased
+     * @see https://www.php.net/manual/ru/function.curl-multi-select.php
+     * @var float
+     */
+    private $curlMultiSelectTimeout = 0.01;
+
     public function __construct()
     {
         $this->mh = curl_multi_init();
@@ -507,6 +515,10 @@ class Client
             // do nothing...
         }
 
+        if ($this->isDebug()) {
+            d('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . $this->results);
+        }
+
         return array_pop($this->results);
     }
 
@@ -621,7 +633,7 @@ class Client
 
         $queueFreeSlotsCount = $this->maxRequest - $this->queriesQueueCount;
 
-        if ($this->sleepSeconds !== 0 && $this->isRunMh) {
+        if ($this->sleepSeconds !== 0 /*&& $this->isRunMh*/) {
             /**
              * Reached limit of the queries at one cycle (for example: only 5 queries per 1 second)
              */
@@ -778,8 +790,8 @@ class Client
     protected function exec()
     {
         do {
-            $mrc = curl_multi_exec($this->mh, $active);
-        } while ($mrc == CURLM_CALL_MULTI_PERFORM || ($this->isSelect && curl_multi_select($this->mh, 0.01) > 0));
+            curl_multi_exec($this->mh, $active);
+        } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
     }
 
     protected function execRead()
@@ -1016,6 +1028,7 @@ class Client
 
     /**
      * Just print string/array/object/etc. variable with current date-time
+     *
      * @param mixed $line
      */
     protected function this_info($line)
@@ -1037,5 +1050,25 @@ class Client
                 var_dump($v);
             }
         }
+    }
+
+    /**
+     * @return float
+     */
+    public function getCurlMultiSelectTimeout(): float
+    {
+        return $this->curlMultiSelectTimeout;
+    }
+
+    /**
+     * @param float $curlMultiSelectTimeout
+     *
+     * @return self
+     */
+    public function setCurlMultiSelectTimeout(float $curlMultiSelectTimeout)
+    {
+        $this->curlMultiSelectTimeout = $curlMultiSelectTimeout;
+
+        return $this;
     }
 }
