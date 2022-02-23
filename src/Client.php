@@ -791,6 +791,7 @@ class Client
     {
         do {
             curl_multi_exec($this->mh, $active);
+            $this->d($active);
         } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
     }
 
