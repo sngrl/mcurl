@@ -516,7 +516,7 @@ class Client
         }
 
         if ($this->isDebug()) {
-            d('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . $this->results);
+            d('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . count($this->results));
         }
 
         return array_pop($this->results);
