@@ -477,17 +477,14 @@ class Client
             $this->exec();
             $this->infoRead();
 
-            /**
-             * Limiting the number of requests per unit of time, if this feature is enabled
-             */
-            $this->doSleep();
-
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
 
         if (!$this->startWorkTime) {
             $this->startWorkTime = microtime(true);
         }
+
+        $this->lastSleepTime = null;
 
         return $this->processedQuery();
     }
@@ -576,6 +573,7 @@ class Client
                 $this->startWorkTime = microtime(true);
             }
 
+            $this->lastSleepTime = null;
             $this->processedQuery();
         }
 
@@ -644,11 +642,6 @@ class Client
                              */
                             unset($this->results[$r]);
                         }
-
-                        /**
-                         * Limiting the number of requests per unit of time, if this feature is enabled
-                         */
-                        $this->doSleep();
                     }
                 }
 
@@ -762,6 +755,11 @@ class Client
         unset($this->queriesQueue[$id]);
 
         /**
+         * Limiting the number of requests per unit of time, if this feature is enabled
+         */
+        $this->doSleep();
+
+        /**
          * Current cycle calculations & actions
          */
         ++$this->processedQueriesCountPerSleepCycle;
@@ -854,10 +852,12 @@ class Client
         /**
          * Initial values
          */
-        if (!$this->lastSleepTime) {
-            //$this->queriesLimitPerSleepCycle = (int)($this->maxRequest * $this->sleepNext);
-            $this->queriesLimitPerSleepCycle = $this->sleepNext;
-            $this->lastSleepTime = microtime(true);
+        if ($this->sleepSeconds !== 0) {
+            if (!$this->lastSleepTime) {
+                //$this->queriesLimitPerSleepCycle = (int)($this->maxRequest * $this->sleepNext);
+                $this->queriesLimitPerSleepCycle = $this->sleepNext;
+                $this->lastSleepTime = microtime(true);
+            }
         }
         if ($this->sleepSeconds !== 0 /*&& $this->isRunMh*/) {
             /**
