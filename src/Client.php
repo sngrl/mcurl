@@ -843,7 +843,8 @@ class Client
                     /**
                      * Start new cycle timer - current time "plus" a negative value of the current cycle time remains
                      */
-                    $this->lastSleepTime = microtime(true) + $currentCycleTimeRemains;
+                    //$this->lastSleepTime = microtime(true) + $currentCycleTimeRemains;
+                    $this->lastSleepTime = microtime(true);
                 }
 
                 if ($this->isDebug()) {
