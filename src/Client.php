@@ -477,6 +477,11 @@ class Client
             $this->exec();
             $this->infoRead();
 
+            /**
+             * Limiting the number of requests per unit of time, if this feature is enabled
+             */
+            $this->doSleep();
+
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
 
@@ -639,6 +644,11 @@ class Client
                              */
                             unset($this->results[$r]);
                         }
+
+                        /**
+                         * Limiting the number of requests per unit of time, if this feature is enabled
+                         */
+                        $this->doSleep();
                     }
                 }
 
@@ -770,11 +780,77 @@ class Client
      */
     protected function processedQuery()
     {
-        // No queries
+        /**
+         * No queries
+         */
         if ($this->queriesCount == 0) {
-            return false;
+            $this->isRunMh = false;
+            return $this->isRunMh;
         }
 
+        /**
+         * If free slots are available at queue...
+         */
+        $queueFreeSlotsCount = $this->maxRequest - $this->queriesQueueCount;
+        if ($queueFreeSlotsCount > 0) {
+            $limit = $this->queriesCount < $queueFreeSlotsCount ? $this->queriesCount : $queueFreeSlotsCount;
+
+            /**
+             * Fill queue for limit was reached
+             */
+            $this->queriesCount -= $limit;
+            $this->queriesQueueCount += $limit;
+            do {
+                /**
+                 * Get first pre-queue query from the stack
+                 */
+                $key = key($this->queries);
+                $query = $this->queries[$key];
+                unset($this->queries[$key]);
+
+                /**
+                 * Create curl handler & add query to queue
+                 */
+                $t = 0;
+                do {
+                    ++$t;
+                    $query['ch'] = curl_init();
+                } while (!is_resource($query['ch']) || $t < 3);
+                if (!is_resource($query['ch'])) {
+                    throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
+                }
+                $opts = $this->curlOptions + $query['opts'];
+                /**
+                 * Create file handler right now if string path provided instead of resource
+                 * @see \MCurl\Client::add
+                 */
+                if (isset($opts[CURLOPT_WRITEHEADER]) && is_string($opts[CURLOPT_WRITEHEADER])) {
+                    $opts[CURLOPT_WRITEHEADER] = fopen($opts[CURLOPT_WRITEHEADER], 'r+');
+                }
+                $query['opts'] = $opts;
+                try {
+                    curl_setopt_array($query['ch'], $query['opts']);
+                } catch (Exception $e) {
+                    $this->d($query);
+                    throw $e;
+                }
+                curl_multi_add_handle($this->mh, $query['ch']);
+                $id = $this->getResourceId($query['ch']);
+                $this->queriesQueue[$id] = $query;
+            } while (--$limit);
+        }
+
+        if ($this->queriesQueueCount) {
+            $this->isRunMh = true;
+            return $this->isRunMh;
+        }
+
+        $this->isRunMh = false;
+        return $this->isRunMh;
+    }
+
+    protected function doSleep()
+    {
         /**
          * Initial values
          */
@@ -783,9 +859,6 @@ class Client
             $this->queriesLimitPerSleepCycle = $this->sleepNext;
             $this->lastSleepTime = microtime(true);
         }
-
-        $queueFreeSlotsCount = $this->maxRequest - $this->queriesQueueCount;
-
         if ($this->sleepSeconds !== 0 /*&& $this->isRunMh*/) {
             /**
              * Reached limit of the queries at one cycle (for example: only 5 queries per 1 second)
@@ -895,59 +968,6 @@ class Client
                 $this->processedQueriesCountPerSleepCycle = 0;
             }
         }
-
-        /**
-         * If free slots are available at queue...
-         */
-        if ($queueFreeSlotsCount > 0) {
-            $limit = $this->queriesCount < $queueFreeSlotsCount ? $this->queriesCount : $queueFreeSlotsCount;
-
-            /**
-             * Fill queue for limit was reached
-             */
-            $this->queriesCount -= $limit;
-            $this->queriesQueueCount += $limit;
-            do {
-                /**
-                 * Get first pre-queue query from the stack
-                 */
-                $key = key($this->queries);
-                $query = $this->queries[$key];
-                unset($this->queries[$key]);
-
-                /**
-                 * Create curl handler & add query to queue
-                 */
-                $t = 0;
-                do {
-                    ++$t;
-                    $query['ch'] = curl_init();
-                } while (!is_resource($query['ch']) || $t < 3);
-                if (!is_resource($query['ch'])) {
-                    throw new Exception('Can not create valid File-Handle resource via curl_init()', 0);
-                }
-                $opts = $this->curlOptions + $query['opts'];
-                /**
-                 * Create file handler right now if string path provided instead of resource
-                 * @see \MCurl\Client::add
-                 */
-                if (isset($opts[CURLOPT_WRITEHEADER]) && is_string($opts[CURLOPT_WRITEHEADER])) {
-                    $opts[CURLOPT_WRITEHEADER] = fopen($opts[CURLOPT_WRITEHEADER], 'r+');
-                }
-                $query['opts'] = $opts;
-                try {
-                    curl_setopt_array($query['ch'], $query['opts']);
-                } catch (Exception $e) {
-                    $this->d($query);
-                    throw $e;
-                }
-                curl_multi_add_handle($this->mh, $query['ch']);
-                $id = $this->getResourceId($query['ch']);
-                $this->queriesQueue[$id] = $query;
-            } while (--$limit);
-        }
-
-        return $this->isRunMh = true;
     }
 
     protected function exec()
