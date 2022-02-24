@@ -477,6 +477,11 @@ class Client
             $this->exec();
             $this->infoRead();
 
+            /**
+             * Limiting the number of requests per unit of time, if this feature is enabled
+             */
+            $this->doSleep();
+
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
 
@@ -621,6 +626,11 @@ class Client
                 $this->infoRead();
 
                 /**
+                 * Limiting the number of requests per unit of time, if this feature is enabled
+                 */
+                $this->doSleep();
+
+                /**
                  * Process responses by callback
                  * @var Result $result
                  */
@@ -753,11 +763,6 @@ class Client
 
         curl_multi_remove_handle($this->mh, $query['ch']);
         unset($this->queriesQueue[$id]);
-
-        /**
-         * Limiting the number of requests per unit of time, if this feature is enabled
-         */
-        $this->doSleep();
 
         /**
          * Current cycle calculations & actions
