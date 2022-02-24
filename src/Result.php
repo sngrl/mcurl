@@ -34,6 +34,11 @@ class Result
      */
     protected $rawHeaders;
 
+    /**
+     * @var bool
+     */
+    public $callback_processed = false;
+
     public function __construct($query)
     {
         $this->query = $query;

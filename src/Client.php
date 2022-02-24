@@ -475,7 +475,7 @@ class Client
     {
         if ($this->isRunMh) {
             $this->exec();
-            $this->execRead();
+            $this->infoRead();
 
             return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
         }
@@ -486,7 +486,6 @@ class Client
 
         return $this->processedQuery();
     }
-
 
     /**
      * Return all results; wait all request
@@ -516,10 +515,164 @@ class Client
         }
 
         if ($this->isDebug()) {
-            d('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . count($this->results));
+            $this->this_info('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . count($this->results));
         }
 
         return array_pop($this->results);
+    }
+
+    /**
+     * Run all queries async & wait until queue is not empty. Must return false when stack is empty
+     *
+     * // Usage example:
+     * while ($this->client->allAsync(function (\MCurl\Result $result) {
+     *     var_dump($result);
+     * )) {
+     *     // do nothing, just wait until all queries are finished...
+     * };
+     *
+     * @param callable|null $callback     Callback which will called for each curl response. \MCurl\Result object will passed as argument
+     *                                    If null passed - all queries will be just runned by curl without any postprocessing
+     * @param int|null      $return_limit Number of the items which will return in one chunk, if you code need to process them.
+     *                                    If null passed -
+     *
+     * @return bool
+     * @throws Exception
+     */
+    public function allAsync($callback = null, $return_limit = null)
+    {
+        if ($return_limit) {
+            while (null != ($results = $this->runAsync($callback, $return_limit))) {
+                return $results;
+            }
+        } else {
+            while ($results = $this->runAsync($callback)) {
+                // do nothing...
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Run query stack async. Must return false when stack is empty
+     *
+     * @param callable|null $callback
+     * @param int|null      $return_limit
+     *
+     * @return array|bool|void
+     * @throws Exception
+     * @see \MCurl\Client::allAsync
+     */
+    public function runAsync($callback = null, $return_limit = null)
+    {
+        if (!$this->isRunMh) {
+            if (!$this->startWorkTime) {
+                $this->startWorkTime = microtime(true);
+            }
+
+            $this->processedQuery();
+        }
+
+        if (!$this->getQueriesQueueCount()) {
+            $this->isRunMh = false;
+
+            return false;
+        }
+
+        if ($return_limit) {
+            return $this->execAsync($callback, $return_limit);
+        } else {
+            $this->execAsync($callback);
+            $this->isRunMh = false;
+
+            return false;
+        }
+    }
+
+    /**
+     * @param callable|null $callback
+     * @param int|null      $return_limit
+     *
+     * @return array|void
+     * @throws Exception
+     */
+    protected function execAsync($callback = null, $return_limit = null)
+    {
+        $lastActive = 0;
+
+        /**
+         * Process queries while queue is not empty
+         */
+        do {
+            curl_multi_exec($this->mh, $active);
+
+            if ($lastActive - $active > 0) {
+                //if ($this->isDebug()) {
+                //    $this->this_info('Call Client::infoRead(), possible allowed results: ' . ($lastActive - $active));
+                //}
+
+                /**
+                 * Get responses for finished requests
+                 */
+                $this->infoRead();
+
+                /**
+                 * Process responses by callback
+                 * @var Result $result
+                 */
+                if (is_callable($callback)) {
+                    //while (!empty($this->results)) {
+                    //    $result = array_pop($this->results);
+                    //    $callback($result);
+                    //}
+                    foreach ($this->results as $r => $result) {
+                        if (@!$result->callback_processed) {
+                            call_user_func($callback, $result);
+                        }
+                        if ($return_limit) {
+                            $result->callback_processed = true;
+                            $this->results[$r] = $result;
+                        } else {
+                            /**
+                             * Do not store results if return limit not passed
+                             */
+                            unset($this->results[$r]);
+                        }
+                    }
+                }
+
+                /**
+                 * If return limit passed...
+                 */
+                if ($return_limit && count($this->results) >= $return_limit) {
+                    /**
+                     * Return results & clear results array
+                     */
+                    $results = $this->results;
+                    $this->results = [];
+
+                    return $results;
+                }
+
+                /**
+                 * Fill queue from pre-queue queries stack
+                 */
+                $this->processedQuery();
+            }
+
+            $lastActive = $active;
+        } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
+
+        /**
+         * Return results if return limit passed
+         */
+        if ($return_limit && count($this->results)) {
+            $results = $this->results;
+            $this->results = [];
+
+            return $results;
+        }
     }
 
     /**
@@ -639,10 +792,15 @@ class Client
              */
             if ($this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle) {
                 $current_time = microtime(true);
+
                 /**
                  * Calculate how much time has passed since last cycle limit reaching
                  */
                 $currentCycleTimeRemains = $this->sleepSeconds - ($current_time - $this->lastSleepTime);
+
+                if ($this->isDebug()) {
+                    $this->this_info('CURRENT CYCLE QUERIES LIMIT REACHED!! $currentCycleTimeRemains = ' . $currentCycleTimeRemains);
+                }
 
                 /**
                  * This value is show how many time left in the current cycle
@@ -670,19 +828,23 @@ class Client
                     }
 
                     usleep($currentCycleTimeRemainsMs);
+
+                    /**
+                     * Start new cycle timer - simple current time
+                     */
+                    $this->lastSleepTime = microtime(true);
                 } else {
                     /**
                      * If this value is less then 0 it means thar reaching the queries limit took more time than one cycle lasts
                      * It mean that some time waiting is not required here, but we need to drop cycle timer below at the code
-                     * It seems that there is no way to get into here
+                     * It seems that there is no way to get into here, BUT it can happen!
                      */
-                    // do nothing...
-                }
 
-                /**
-                 * Start new cycle timer & drop single cycle processed queries counter
-                 */
-                $this->lastSleepTime = microtime(true);
+                    /**
+                     * Start new cycle timer - current time "plus" a negative value of the current cycle time remains
+                     */
+                    $this->lastSleepTime = microtime(true) + $currentCycleTimeRemains;
+                }
 
                 if ($this->isDebug()) {
                     $this->d([
@@ -694,6 +856,9 @@ class Client
                     ]);
                 }
 
+                /**
+                 * Drop single cycle processed queries counter
+                 */
                 $this->processedQueriesCountPerSleepCycle = 0;
             } elseif ($this->lastSleepTime + $this->sleepSeconds <= microtime(true)) {
                 /**
@@ -767,9 +932,6 @@ class Client
                  */
                 if (isset($opts[CURLOPT_WRITEHEADER]) && is_string($opts[CURLOPT_WRITEHEADER])) {
                     $opts[CURLOPT_WRITEHEADER] = fopen($opts[CURLOPT_WRITEHEADER], 'r+');
-                    //if (!$opts[CURLOPT_WRITEHEADER]) {
-                    //    return false;
-                    //}
                 }
                 $query['opts'] = $opts;
                 try {
@@ -791,17 +953,21 @@ class Client
     {
         do {
             curl_multi_exec($this->mh, $active);
-            $this->d($active);
         } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
     }
 
-    protected function execRead()
+    protected function infoRead()
     {
         while (($info = curl_multi_info_read($this->mh, $active)) !== false) {
-            if ($info['msg'] === CURLMSG_DONE) {
-                $id = $this->getResourceId($info['handle']);
-                $this->processedResponse($id);
-            }
+            $this->infoReadProcessResponse($info);
+        }
+    }
+
+    protected function infoReadProcessResponse($info)
+    {
+        if ($info['msg'] === CURLMSG_DONE) {
+            $id = $this->getResourceId($info['handle']);
+            $this->processedResponse($id);
         }
     }
 
