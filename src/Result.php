@@ -23,17 +23,14 @@ class Result
      * @var int            $errorCode
      *
      */
-
     /**
      * @var array
      */
     protected $query;
-
     /**
      * @var array
      */
     protected $rawHeaders;
-
     /**
      * @var bool
      */
@@ -82,7 +79,6 @@ class Result
         if (isset($opts[CURLOPT_WRITEHEADER])) {
             unset($opts[CURLOPT_WRITEHEADER]);
         }
-
         return $opts;
     }
 
@@ -114,7 +110,6 @@ class Result
     {
         $opts = $this->query['opts'];
         unset($opts[CURLOPT_FILE]);
-
         return $opts;
     }
 
@@ -148,7 +143,6 @@ class Result
             $headersRaw = stream_get_contents($this->query['opts'][CURLOPT_WRITEHEADER]);
             $headers = explode("\n", rtrim($headersRaw));
             $this->rawHeaders['result'] = trim(array_shift($headers));
-
             foreach ($headers as $header) {
                 list($name, $value) = array_map('trim', explode(':', $header, 2));
                 $name = strtolower($name);
@@ -159,7 +153,6 @@ class Result
                 }
             }
         }
-
         return $this->rawHeaders;
     }
 
@@ -170,7 +163,6 @@ class Result
     {
         if (isset($this->query['opts'][CURLOPT_FILE])) {
             rewind($this->query['opts'][CURLOPT_FILE]);
-
             return stream_get_contents($this->query['opts'][CURLOPT_FILE]);
         } else {
             return curl_multi_getcontent($this->query['ch']);
@@ -183,7 +175,6 @@ class Result
     public function getBodyStream()
     {
         rewind($this->query['opts'][CURLOPT_FILE]);
-
         return $this->query['opts'][CURLOPT_FILE];
     }
 
@@ -197,7 +188,6 @@ class Result
             return @json_decode($this->getBody(), true);
         } else {
             array_unshift($args, $this->getBody());
-
             return @call_user_func_array('json_decode', $args);
         }
     }
@@ -250,8 +240,7 @@ class Result
     public function hasError($type = null)
     {
         $errorType = $this->getErrorType();
-
-        return (isset($errorType) && ($errorType == $type || !isset($type)));
+        return isset($errorType) && ($errorType == $type || !isset($type));
     }
 
     /**
@@ -263,11 +252,9 @@ class Result
         if (curl_error($this->query['ch'])) {
             return 'network';
         }
-
         if ($this->getHttpCode() >= 400) {
             return 'http';
         }
-
         return null;
     }
 
@@ -286,7 +273,6 @@ class Result
                 $message = 'http error ' . $this->getHttpCode();
                 break;
         }
-
         return $message;
     }
 
@@ -305,7 +291,6 @@ class Result
                 $number = $this->getHttpCode();
                 break;
         }
-
         return $number;
     }
 
@@ -323,13 +308,7 @@ class Result
      */
     public function toArray()
     {
-        return [
-            'error'      => $this->getErrorArray(),
-            'headers'    => $this->getHeaders(),
-            'body'       => $this->getBody(),
-            'options'    => $this->getOptionsFull(),
-            'parameters' => $this->getParameters(),
-        ];
+        return ['error' => $this->getErrorArray(), 'headers' => $this->getHeaders(), 'body' => $this->getBody(), 'options' => $this->getOptionsFull(), 'parameters' => $this->getParameters()];
     }
 
     /**
@@ -337,14 +316,7 @@ class Result
      */
     public function getErrorArray()
     {
-        return ($this->hasError()
-            ? [
-                'type'    => $this->getErrorType(),
-                'code'    => $this->getErrorCode(),
-                'message' => $this->getError(),
-            ]
-            : null
-        );
+        return $this->hasError() ? ['type' => $this->getErrorType(), 'code' => $this->getErrorCode(), 'message' => $this->getError()] : null;
     }
 
     /**
@@ -358,14 +330,12 @@ class Result
     public function __get($key)
     {
         $method = 'get' . $key;
-
-        return method_exists($this, $method) ? $this->$method() : null;
+        return method_exists($this, $method) ? $this->{$method}() : null;
     }
 
     public function __destruct()
     {
         $this->closeFileHandlers();
-
         if (is_resource($this->query['ch'])) {
             curl_close($this->query['ch']);
         }
@@ -379,11 +349,9 @@ class Result
         if (isset($this->query['opts'][CURLOPT_FILE]) && is_resource($this->query['opts'][CURLOPT_FILE])) {
             fclose($this->query['opts'][CURLOPT_FILE]);
         }
-
         if (isset($this->query['opts'][CURLOPT_WRITEHEADER]) && is_resource($this->query['opts'][CURLOPT_WRITEHEADER])) {
             fclose($this->query['opts'][CURLOPT_WRITEHEADER]);
         }
-
         return $this;
     }
 }

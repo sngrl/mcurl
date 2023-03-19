@@ -10,181 +10,146 @@ class Client
      * Result write in memory
      */
     const STREAM_MEMORY = 'php://memory';
-
     /**
      * Result write in temporary files. Dir @see sys_get_temp_dir()
      */
     const STREAM_FILE = 'php://temp/maxmemory:0';
-
     /**
      * Stream for CURLOPT_WRITEHEADER; by default: self::STREAM_MEMORY
      * @var string
      */
     protected $defaultStream;
-
     /**
      * Not exec request
      * @var array
      */
     protected $queries = [];
-
     /**
      * Count of the requests which are not executed yet - waiting for going to active queue
      * @var int
      */
     protected $queriesCount = 0;
-
     /**
      * Exec request
      * @var array
      */
     protected $queriesQueue = [];
-
     /**
      * Exec count request
      * @var int
      */
     protected $queriesQueueCount = 0;
-
     /**
      * Curl default  options
      * @see ->addCurlOption(), ->getCurlOption(), ->delCurlOption()
      * @var array
      */
-    protected $curlOptions = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 60,
-        CURLOPT_FOLLOWLOCATION => true,
-    ];
-
+    protected $curlOptions = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_FOLLOWLOCATION => true];
     /**
      * Max asynchronous requests
      * @var int
      */
     protected $maxRequest = 10;
-
     /**
      * Return result class
      * @var int microsecond
      */
     protected $classResult = '\\MCurl\\Result';
-
     /**
      * Sleep script undo $this->sleepNext request
      * @var float
      */
     protected $sleepSeconds = 0;
-
     /**
      * Count of the queries which was processed in one cycle
      * @var int
      */
     protected $sleepNext;
-
     /**
      * @var boolean
      * @deprecated
      */
     protected $sleepBlocking;
-
     /**
      * Total executed requests count
      * @var int
      */
     protected $totalExecutedRequests = 0;
-
     /**
      * Save results
      * @var array
      */
     protected $results = [];
-
     /**
      * @see curl_multi_init()
      * @var null
      */
     protected $mh;
-
     /**
      * CurlShareHandle from curl_share_init()
      */
     protected $sh;
-
     /**
      * has Request
      * @var bool
      */
     protected $isRunMh = false;
-
     /**
      * Has use blocking function curl_multi_select
      * @var bool
      */
     protected $isSelect = true;
-
     /**
      * @example self::STREAM_MEMORY
      * @see     http://php.net/manual/ru/wrappers.php
      * @var string
      */
     protected $streamResult = null;
-
     /**
      * @var bool
      */
     protected $enableHeaders = false;
-
     /**
      * @var array
      * @see http://php.net/manual/ru/stream.filters.php
      */
     protected $streamFilters = [];
-
     /**
      * @var string
      */
     protected $baseUrl;
-
     /**
      * @var null|float
      */
     protected $startWorkTime = null;
-
     /**
      * @var null|integer
      */
     protected $queriesLimitPerSleepCycle = null;
-
     /**
      * @var int
      */
     protected $processedQueriesCountPerSleepCycle = 0;
-
     /**
      * @var null|float
      */
     protected $lastSleepTime = null;
-
     /**
      * @var bool
      */
     private $afterRequestTimeoutEnabled = false;
-
     /**
      * @var float
      */
     private $afterRequestTimeoutCoefficient = 0.25;
-
     /**
      * @var float|int
      */
     private $afterRequestTimeout = null;
-
     /**
      * @var bool
      */
     private $debug = false;
-
     /**
      * Float value for second argument on calling curl_multi_select() function
      * At some work cases with high values of the threads probably must be decreased
@@ -212,15 +177,13 @@ class Client
      * @return Result|Result[]|null
      * @throws Exception
      */
-    public function get($url, $opts = [], $params = [])
+    public function get($url, $opts = array(), $params = array())
     {
         $urls = (array)$url;
-
         foreach ($urls as $id => $u) {
             $opts[CURLOPT_URL] = $u;
             $this->add($opts, $params, $id);
         }
-
         return is_array($url) ? $this->all() : $this->next();
     }
 
@@ -234,11 +197,10 @@ class Client
      * @throws Exception
      * @see $this->get
      */
-    public function post($url, $data = [], $opts = [], $params = [])
+    public function post($url, $data = array(), $opts = array(), $params = array())
     {
         $opts[CURLOPT_POST] = true;
         $opts[CURLOPT_POSTFIELDS] = $data;
-
         return $this->get($url, $opts, $params);
     }
 
@@ -251,30 +213,26 @@ class Client
      *
      * @return bool
      */
-    public function add($opts = [], $params = [], $id = null)
+    public function add($opts = array(), $params = array(), $id = null)
     {
         //if (is_string($params)) {
         //    $id = $params;
         //    $params = [];
         //}
-
         if (isset($this->baseUrl, $opts[CURLOPT_URL])) {
             $opts[CURLOPT_URL] = $this->baseUrl . $opts[CURLOPT_URL];
         }
-
         if (isset($this->streamResult) && !isset($opts[CURLOPT_FILE])) {
             $opts[CURLOPT_FILE] = fopen($this->streamResult, 'r+');
             if (!$opts[CURLOPT_FILE]) {
                 return false;
             }
         }
-
         if (!empty($this->streamFilters) && isset($opts[CURLOPT_FILE])) {
             foreach ($this->streamFilters as $filter) {
                 stream_filter_append($opts[CURLOPT_FILE], $filter);
             }
         }
-
         if (!isset($opts[CURLOPT_WRITEHEADER]) && $this->enableHeaders) {
             /**
              * v1: create file handler right now
@@ -293,16 +251,9 @@ class Client
             //
             $opts[CURLOPT_WRITEHEADER] = $this->getDefaultStream();
         }
-
-        $query = [
-            'id'     => $id,
-            'opts'   => $opts,
-            'params' => $params,
-        ];
-
+        $query = ['id' => $id, 'opts' => $opts, 'params' => $params];
         $this->queries[] = $query;
         $this->queriesCount++;
-
         return true;
     }
 
@@ -320,7 +271,6 @@ class Client
     public function setStreamResult($stream)
     {
         $this->streamResult = $stream;
-
         return $this;
     }
 
@@ -336,7 +286,6 @@ class Client
     public function setStreamFilters(array $filters)
     {
         $this->streamFilters = $filters;
-
         return $this;
     }
 
@@ -350,7 +299,6 @@ class Client
     public function enableHeaders($enable = true)
     {
         $this->enableHeaders = $enable;
-
         return $this;
     }
 
@@ -374,7 +322,6 @@ class Client
         foreach ($values as $key => $value) {
             $this->curlOptions[$key] = $value;
         }
-
         return $this;
     }
 
@@ -401,9 +348,7 @@ class Client
             $this->sh = curl_share_init();
             $this->setCurlOption([CURLOPT_SHARE => $this->sh]);
         }
-
         curl_share_setopt($this->sh, $option, $value);
-
         return $this;
     }
 
@@ -421,7 +366,6 @@ class Client
         if (function_exists('curl_multi_setopt')) {
             curl_multi_setopt($this->mh, CURLMOPT_MAXCONNECTS, $max);
         }
-
         return $this;
     }
 
@@ -445,7 +389,6 @@ class Client
         $this->sleepNext = $next;
         $this->sleepSeconds = $seconds;
         $this->sleepBlocking = $blocking;
-
         return $this;
     }
 
@@ -476,21 +419,16 @@ class Client
         if ($this->isRunMh) {
             $this->exec();
             $this->infoRead();
-
             /**
              * Limiting the number of requests per unit of time, if this feature is enabled
              */
             $this->doSleep();
-
-            return ($this->processedQuery() || $this->queriesQueueCount > 0) ? true : ($this->isRunMh = false);
+            return $this->processedQuery() || $this->queriesQueueCount > 0 ? true : ($this->isRunMh = false);
         }
-
         if (!$this->startWorkTime) {
             $this->startWorkTime = microtime(true);
         }
-
         $this->lastSleepTime = null;
-
         return $this->processedQuery();
     }
 
@@ -506,7 +444,6 @@ class Client
         }
         $results = $this->results;
         $this->results = [];
-
         return $results;
     }
 
@@ -520,11 +457,9 @@ class Client
         while (empty($this->results) && $this->run()) {
             // do nothing...
         }
-
         if ($this->isDebug()) {
             $this->this_info('->next() while cycle was ended, threads: ' . $this->maxRequest . ', count($this->results) = ' . count($this->results));
         }
-
         return array_pop($this->results);
     }
 
@@ -557,7 +492,6 @@ class Client
                 // do nothing...
             }
         }
-
         return false;
     }
 
@@ -577,23 +511,18 @@ class Client
             if (!$this->startWorkTime) {
                 $this->startWorkTime = microtime(true);
             }
-
             $this->lastSleepTime = null;
             $this->processedQuery();
         }
-
         if (!$this->getQueriesQueueCount()) {
             $this->isRunMh = false;
-
             return false;
         }
-
         if ($return_limit) {
             return $this->execAsync($callback, $return_limit);
         } else {
             $this->execAsync($callback);
             $this->isRunMh = false;
-
             return false;
         }
     }
@@ -608,28 +537,23 @@ class Client
     protected function execAsync($callback = null, $return_limit = null)
     {
         $lastActive = 0;
-
         /**
          * Process queries while queue is not empty
          */
         do {
             curl_multi_exec($this->mh, $active);
-
             if ($lastActive - $active > 0) {
                 //if ($this->isDebug()) {
                 //    $this->this_info('Call Client::infoRead(), possible allowed results: ' . ($lastActive - $active));
                 //}
-
                 /**
                  * Get responses for finished requests
                  */
                 $this->infoRead();
-
                 /**
                  * Limiting the number of requests per unit of time, if this feature is enabled
                  */
                 $this->doSleep();
-
                 /**
                  * Process responses by callback
                  * @var Result $result
@@ -640,7 +564,7 @@ class Client
                     //    $callback($result);
                     //}
                     foreach ($this->results as $r => $result) {
-                        if (@!$result->callback_processed) {
+                        if (@(!$result->callback_processed)) {
                             call_user_func($callback, $result);
                         }
                         if ($return_limit) {
@@ -654,7 +578,6 @@ class Client
                         }
                     }
                 }
-
                 /**
                  * If return limit passed...
                  */
@@ -664,26 +587,21 @@ class Client
                      */
                     $results = $this->results;
                     $this->results = [];
-
                     return $results;
                 }
-
                 /**
                  * Fill queue from pre-queue queries stack
                  */
                 $this->processedQuery();
             }
-
             $lastActive = $active;
-        } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
-
+        } while ($active > 0 || $this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0);
         /**
          * Return results if return limit passed
          */
         if ($return_limit && count($this->results)) {
             $results = $this->results;
             $this->results = [];
-
             return $results;
         }
     }
@@ -697,7 +615,6 @@ class Client
         return !empty($this->results);
     }
 
-
     /**
      * Clear result request
      * @return self
@@ -705,7 +622,6 @@ class Client
     public function clear()
     {
         $this->results = [];
-
         return $this;
     }
 
@@ -719,7 +635,6 @@ class Client
     public function setClassResult(string $name)
     {
         $this->classResult = $name;
-
         return $this;
     }
 
@@ -731,7 +646,6 @@ class Client
     public function setIsSelect($select)
     {
         $this->isSelect = $select;
-
         return $this;
     }
 
@@ -753,17 +667,14 @@ class Client
         --$this->queriesQueueCount;
         ++$this->totalExecutedRequests;
         $query = $this->queriesQueue[$id];
-
         $result = new $this->classResult($query);
         if (isset($query['id']) && $query['id'] !== null) {
             $this->results[$query['id']] = $result;
         } else {
             $this->results[] = $result;
         }
-
         curl_multi_remove_handle($this->mh, $query['ch']);
         unset($this->queriesQueue[$id]);
-
         /**
          * Current cycle calculations & actions
          */
@@ -773,7 +684,6 @@ class Client
                 usleep($this->afterRequestTimeout);
             }
         }
-
         return true;
     }
 
@@ -790,14 +700,12 @@ class Client
             $this->isRunMh = false;
             return $this->isRunMh;
         }
-
         /**
          * If free slots are available at queue...
          */
         $queueFreeSlotsCount = $this->maxRequest - $this->queriesQueueCount;
         if ($queueFreeSlotsCount > 0) {
             $limit = $this->queriesCount < $queueFreeSlotsCount ? $this->queriesCount : $queueFreeSlotsCount;
-
             /**
              * Fill queue for limit was reached
              */
@@ -810,7 +718,6 @@ class Client
                 $key = key($this->queries);
                 $query = $this->queries[$key];
                 unset($this->queries[$key]);
-
                 /**
                  * Create curl handler & add query to queue
                  */
@@ -842,12 +749,10 @@ class Client
                 $this->queriesQueue[$id] = $query;
             } while (--$limit);
         }
-
         if ($this->queriesQueueCount) {
             $this->isRunMh = true;
             return $this->isRunMh;
         }
-
         $this->isRunMh = false;
         return $this->isRunMh;
     }
@@ -864,33 +769,28 @@ class Client
                 $this->lastSleepTime = microtime(true);
             }
         }
-        if ($this->sleepSeconds !== 0 /*&& $this->isRunMh*/) {
+        if ($this->sleepSeconds !== 0) {
             /**
              * Reached limit of the queries at one cycle (for example: only 5 queries per 1 second)
              */
             if ($this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle) {
                 $current_time = microtime(true);
-
                 /**
                  * Calculate how much time has passed since last cycle limit reaching
                  */
                 $currentCycleTimeRemains = $this->sleepSeconds - ($current_time - $this->lastSleepTime);
-
                 if ($this->isDebug()) {
                     $this->this_info('CURRENT CYCLE QUERIES LIMIT REACHED!! $currentCycleTimeRemains = ' . $currentCycleTimeRemains);
                 }
-
                 /**
                  * This value is show how many time left in the current cycle
                  * If this value is greater than 0 it means that we need to wait this time, until the current cycle ends
                  */
                 if ($currentCycleTimeRemains > 0) {
                     $currentCycleTimeRemainsMs = $currentCycleTimeRemains * 1000000;
-
                     if ($this->isDebug()) {
                         $this->this_info('SLEEP ' . round($currentCycleTimeRemains, 4) . ' sec(s)... Cycle queries limit: ' . $this->queriesLimitPerSleepCycle . ' per ' . $this->sleepSeconds . ' sec(s)');
                     }
-
                     /**
                      * Set/update timeout correction after each request
                      *
@@ -904,9 +804,7 @@ class Client
                             $this->this_info('Correction = ' . $this->afterRequestTimeout);
                         }
                     }
-
                     usleep($currentCycleTimeRemainsMs);
-
                     /**
                      * Start new cycle timer - simple current time
                      */
@@ -917,24 +815,15 @@ class Client
                      * It mean that some time waiting is not required here, but we need to drop cycle timer below at the code
                      * It seems that there is no way to get into here, BUT it can happen!
                      */
-
                     /**
                      * Start new cycle timer - current time "plus" a negative value of the current cycle time remains
                      */
                     //$this->lastSleepTime = microtime(true) + $currentCycleTimeRemains;
                     $this->lastSleepTime = microtime(true);
                 }
-
                 if ($this->isDebug()) {
-                    $this->d([
-                        '__event__'                                 => '$this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle',
-                        '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle,
-                        '$this->queriesLimitPerSleepCycle'          => $this->queriesLimitPerSleepCycle,
-                        '$currentCycleTimeRemains'                  => $currentCycleTimeRemains,
-                        '$this->afterRequestTimeoutCorrection'      => $this->afterRequestTimeout,
-                    ]);
+                    $this->d(['__event__' => '$this->processedQueriesCountPerSleepCycle >= $this->queriesLimitPerSleepCycle', '$this->processedQueriesCountPerSleepCycle' => $this->processedQueriesCountPerSleepCycle, '$this->queriesLimitPerSleepCycle' => $this->queriesLimitPerSleepCycle, '$currentCycleTimeRemains' => $currentCycleTimeRemains, '$this->afterRequestTimeoutCorrection' => $this->afterRequestTimeout]);
                 }
-
                 /**
                  * Drop single cycle processed queries counter
                  */
@@ -946,7 +835,6 @@ class Client
                 if ($this->isDebug()) {
                     $this->this_info('DROP CYCLE TIMER!! Processed queries at the current cycle: ' . $this->processedQueriesCountPerSleepCycle . ' of ' . $this->queriesLimitPerSleepCycle);
                 }
-
                 /**
                  * Set/update timeout correction after each request
                  *
@@ -957,15 +845,11 @@ class Client
                  * Third: multiple this value on the coefficient (0.0 - 1.0)
                  */
                 if ($this->afterRequestTimeoutEnabled) {
-                    $this->afterRequestTimeout = $this->afterRequestTimeout
-                        ? $this->processedQueriesCountPerSleepCycle * $this->afterRequestTimeout / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient
-                        : null;
-
+                    $this->afterRequestTimeout = $this->afterRequestTimeout ? $this->processedQueriesCountPerSleepCycle * $this->afterRequestTimeout / $this->queriesLimitPerSleepCycle * $this->afterRequestTimeoutCoefficient : null;
                     if ($this->isDebug()) {
                         $this->this_info('New value for $this->afterRequestTimeoutCorrection: ' . $this->afterRequestTimeout);
                     }
                 }
-
                 /**
                  * Start new cycle timer, drop single cycle processed queries counter,
                  */
@@ -979,7 +863,7 @@ class Client
     {
         do {
             curl_multi_exec($this->mh, $active);
-        } while ($active > 0 || ($this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0));
+        } while ($active > 0 || $this->isSelect && curl_multi_select($this->mh, $this->curlMultiSelectTimeout) > 0);
     }
 
     protected function infoRead()
@@ -1023,7 +907,6 @@ class Client
     public function setBaseUrl($baseUrl)
     {
         $this->baseUrl = $baseUrl;
-
         return $this;
     }
 
@@ -1077,11 +960,9 @@ class Client
     public function enableAfterRequestTimeout($afterRequestTimeoutCoefficient = null)
     {
         $this->afterRequestTimeoutEnabled = true;
-
         if (is_float($afterRequestTimeoutCoefficient) || is_integer($afterRequestTimeoutCoefficient)) {
             $this->afterRequestTimeoutCoefficient = $afterRequestTimeoutCoefficient;
         }
-
         return $this;
     }
 
@@ -1091,7 +972,6 @@ class Client
     public function disableAfterRequestTimeout()
     {
         $this->afterRequestTimeoutEnabled = false;
-
         return $this;
     }
 
@@ -1111,7 +991,6 @@ class Client
     public function setAfterRequestTimeoutCoefficient(float $afterRequestTimeoutCoefficient)
     {
         $this->afterRequestTimeoutCoefficient = $afterRequestTimeoutCoefficient;
-
         return $this;
     }
 
@@ -1179,7 +1058,6 @@ class Client
     public function setDefaultStream(string $defaultStream)
     {
         $this->defaultStream = $defaultStream;
-
         return $this;
     }
 
@@ -1199,7 +1077,6 @@ class Client
     public function setDebug(bool $debug)
     {
         $this->debug = $debug;
-
         return $this;
     }
 
@@ -1235,9 +1112,9 @@ class Client
     protected function d()
     {
         foreach (func_get_args() as $v) {
-            if (null != ($class_name = '\Symfony\Component\VarDumper\VarDumper') && class_exists($class_name)) {
+            if (null != ($class_name = '\\Symfony\\Component\\VarDumper\\VarDumper') && class_exists($class_name)) {
                 $class_name::dump($v);
-            } elseif (null != ($class_name = '\Illuminate\Support\Debug\Dumper') && class_exists($class_name)) {
+            } elseif (null != ($class_name = '\\Illuminate\\Support\\Debug\\Dumper') && class_exists($class_name)) {
                 (new $class_name())->dump($v);
             } else {
                 var_dump($v);
@@ -1261,7 +1138,6 @@ class Client
     public function setCurlMultiSelectTimeout(float $curlMultiSelectTimeout)
     {
         $this->curlMultiSelectTimeout = $curlMultiSelectTimeout;
-
         return $this;
     }
 }

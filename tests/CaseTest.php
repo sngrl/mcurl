@@ -4,17 +4,16 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use MCurl\Client;
 
-
-abstract class CaseTest extends PHPUnit_Framework_TestCase {
-
+abstract class CaseTest extends PHPUnit_Framework_TestCase
+{
     protected $domain = 'test.multi.dev';
-
     /**
      * @var Client
      */
     protected $req;
 
-    public function setUp() {
+    public function setUp()
+    {
         $domain = getenv('TEST_DOMAIN');
         if ($domain) {
             $this->domain = $domain;
@@ -22,13 +21,15 @@ abstract class CaseTest extends PHPUnit_Framework_TestCase {
         $this->req = $this->createReq();
     }
 
-    protected function createReq() {
+    protected function createReq()
+    {
         $req = new Client();
         $req->setMaxRequest(10);
         return $req;
     }
 
-    protected function url($path) {
+    protected function url($path)
+    {
         return 'http://' . $this->domain . $path;
     }
 }
